@@ -1,4 +1,4 @@
-// ChatGPT contribution: Production middleware for HumaLyte Plus 5 (one result per transmission)
+// ChatGPT contribution: Production middleware for AIA_360 (one result per transmission)
 package org.carecode.lims.mw;
 
 import com.fazecast.jSerialComm.SerialPort;
@@ -17,15 +17,15 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.carecode.lims.libraries.*;
 
-public class HumaLytePlus5 {
+public class AIA_360 {
 
-    public static final Logger logger = LogManager.getLogger("HumaLytePlus5Logger");
+    public static final Logger logger = LogManager.getLogger("AIA_360Logger");
     public static MiddlewareSettings middlewareSettings;
     public static LISCommunicator limsUtils;
     public static boolean testingLis = false;
 
     public static void main(String[] args) {
-        logger.info("HumaLytePlus5 Middleware started at: " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
+        logger.info("AIA_360 Middleware started at: " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
         loadSettings();
 
         if (middlewareSettings != null) {
