@@ -159,7 +159,7 @@ public class AIA_360 {
 
             sendSingleResult(null, sampleNo, analyte, result, null, null);
             if (rate != null) {
-                sendSingleResult(null, sampleNo, analyte , rate, null, null);
+                sendSingleResult(null, sampleNo, analyte + "_RATE", rate, null, null);
             }
 
             logger.info("✅ Result(s) sent to LIMS for Sample=" + sampleNo);
@@ -181,13 +181,13 @@ public class AIA_360 {
             dataBundle.setMiddlewareSettings(middlewareSettings);
 
             PatientRecord patientRecord = new PatientRecord(
-                    0, patientId, null, "Unknown", null, null, null, null, null, null, null
+                    0, sampleNo, null, "Unknown", null, null, null, null, null, null, null
             );
             dataBundle.setPatientRecord(patientRecord);
 
             ResultsRecord resultsRecord = new ResultsRecord(
                     0, testCode, resultValue, minValue, maxValue, "",
-                    "Serum", "", null, null, patientId
+                    "Serum", "", null, null, sampleNo
             );
             dataBundle.addResultsRecord(resultsRecord);
 
