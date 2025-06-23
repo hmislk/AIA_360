@@ -6,12 +6,8 @@ import com.google.gson.Gson;
 import java.io.FileReader;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.Map;
-import java.util.concurrent.Executors;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -30,14 +26,6 @@ public class AIA_360 {
 
         if (middlewareSettings != null) {
             limsUtils = new LISCommunicator(logger, middlewareSettings);
-
-            if (testingLis) {
-                logger.info("Testing LIS started");
-                testLis();
-                logger.info("Testing LIS Ended. System will now shutdown.");
-                System.exit(0);
-            }
-
             listenToAnalyzer();
         } else {
             logger.error("Failed to load settings.");
@@ -54,22 +42,6 @@ public class AIA_360 {
         }
     }
 
-    public static void testLis() {
-        logger.info("Starting LIMS test process...");
-        String filePath = "response.txt";
-
-        try {
-            String responseContent = new String(Files.readAllBytes(Paths.get(filePath)), StandardCharsets.UTF_8);
-            Map<String, String> params = limsUtils.parseQueryParams(responseContent);
-            DataBundle dataBundle = limsUtils.createDataBundleFromParams(params);
-            limsUtils.pushResults(dataBundle);
-            logger.info("Test results sent to LIMS successfully.");
-        } catch (IOException e) {
-            logger.error("Failed to read test data from file: " + filePath, e);
-        } catch (Exception e) {
-            logger.error("An unexpected error occurred during the LIMS test process.", e);
-        }
-    }
 
     public static void listenToAnalyzer() {
         SerialPort analyzerPort = SerialPort.getCommPort(middlewareSettings.getAnalyzerDetails().getAnalyzerIP());
