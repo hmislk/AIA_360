@@ -1,4 +1,4 @@
-// ChatGPT contribution: Production middleware for AIA_360 (ASTM-based)
+// ChatGPT contribution: Production middleware for AIA_360 (Raw Chunk Based)
 package org.carecode.lims.mw;
 
 import com.fazecast.jSerialComm.SerialPort;
@@ -12,8 +12,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.List;
 
 public class AIA_360 {
 
@@ -22,7 +20,7 @@ public class AIA_360 {
     public static LISCommunicator limsUtils;
     public static boolean testingLis = false;
 
-    private static final List<String> aia360BlockBuffer = new ArrayList<>();
+    private static final StringBuilder partialData = new StringBuilder();
 
     public static void main(String[] args) {
         logger.info("AIA_360 Middleware started at: " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
@@ -38,7 +36,7 @@ public class AIA_360 {
 
     public static void loadSettings() {
         Gson gson = new Gson();
-        try (FileReader reader = new FileReader("config.json")) {
+        try (FileReader reader = new FileReader("C:\\CCMW\\SysmaxXS500i\\settings\\AIA360\\config.json")) {
             middlewareSettings = gson.fromJson(reader, MiddlewareSettings.class);
             logger.info("Settings loaded from config.json");
         } catch (IOException e) {
@@ -47,116 +45,157 @@ public class AIA_360 {
     }
 
     public static void listenToAnalyzer() {
-        SerialPort analyzerPort = SerialPort.getCommPort(middlewareSettings.getAnalyzerDetails().getAnalyzerIP());
+        String portName = middlewareSettings.getAnalyzerDetails().getAnalyzerIP();
+        SerialPort analyzerPort = SerialPort.getCommPort(portName);
 
-        analyzerPort.setBaudRate(19200);
+        analyzerPort.setBaudRate(9600);
         analyzerPort.setNumDataBits(8);
         analyzerPort.setNumStopBits(SerialPort.ONE_STOP_BIT);
         analyzerPort.setParity(SerialPort.NO_PARITY);
 
+        logger.debug("Configured serial port: " + portName);
+        logger.debug("BaudRate: " + analyzerPort.getBaudRate());
+        logger.debug("DataBits: " + analyzerPort.getNumDataBits());
+        logger.debug("StopBits: " + analyzerPort.getNumStopBits());
+        logger.debug("Parity: " + analyzerPort.getParity());
+
         if (!analyzerPort.openPort()) {
-            logger.error("Failed to open serial port: " + middlewareSettings.getAnalyzerDetails().getAnalyzerIP());
+            logger.error("❌ Failed to open serial port: " + portName);
             return;
         }
 
-        logger.info("Listening to analyzer on port: " + analyzerPort.getSystemPortName());
+        logger.info("✅ Listening to analyzer on port: " + analyzerPort.getSystemPortName());
+        logger.info("Port open status: " + analyzerPort.isOpen());
 
         new Thread(() -> {
             byte[] buffer = new byte[1024];
-            StringBuilder partialData = new StringBuilder();
 
             while (true) {
                 try {
-                    if (analyzerPort.bytesAvailable() > 0) {
-                        int numRead = analyzerPort.readBytes(buffer, buffer.length);
+                    int available = analyzerPort.bytesAvailable();
+                    if (available == 0) {
+                        Thread.sleep(100);
+                        continue;
+                    }
+
+                    int numRead = analyzerPort.readBytes(buffer, buffer.length);
+                    logger.debug("Read bytes: " + numRead);
+
+                    if (numRead > 0) {
                         String received = new String(buffer, 0, numRead, StandardCharsets.UTF_8);
+                        logger.debug("Raw received chunk: [" + received + "]");
                         partialData.append(received);
 
-                        String[] lines = partialData.toString().split("\r?\n");
-                        for (int i = 0; i < lines.length - 1; i++) {
-                            processLine(lines[i]);
+                        if (partialData.toString().contains("Date=")) {
+                            String fullMessage = partialData.toString().replaceAll("[^\\u0020-\\u007E]", "").trim();
+                            logger.info("🟢 Complete message received:\n" + fullMessage);
+                            processFormattedResult(fullMessage);
+                            partialData.setLength(0);
                         }
-                        partialData = new StringBuilder(lines[lines.length - 1]);
+                    } else {
+                        logger.warn("readBytes() returned 0 despite bytesAvailable > 0");
                     }
-                    Thread.sleep(100);
+
                 } catch (Exception e) {
-                    logger.error("Error while reading from serial port", e);
+                    logger.error("⚠️ Error while reading from serial port", e);
                 }
             }
         }).start();
     }
 
-    private static void processLine(String line) {
-        line = line.replaceAll("[^\\u0020-\\u007E]", "").trim();
-        if (line.isEmpty()) {
-            return;
-        }
-        logger.info("Received Line: " + line);
+    private static void processFormattedResult(String fullText) {
+        try {
+            logger.debug("🔍 Raw message block:\n" + fullText);
 
-        if (line.startsWith("H|")) {
-            aia360BlockBuffer.clear();
-        }
-        aia360BlockBuffer.add(line);
+            String[] tokens = fullText.split(",");
+            String sampleNo = null;
+            String analyte = null;
+            String result = null;
+            String rate = null;
+            String unit = null;
+            String flag = null;
+            String date = null;
 
-        if (line.startsWith("L|")) {
-            processAIA360MessageBlock(new ArrayList<>(aia360BlockBuffer));
-            aia360BlockBuffer.clear();
-        }
-    }
+            for (int i = 0; i < tokens.length - 1; i++) {
+                String key = tokens[i].trim();
+                String value = tokens[i + 1].trim();
 
-    private static void processAIA360MessageBlock(List<String> lines) {
-        String sampleNo = null, analyteCode = null, resultValue = null, rateValue = null;
-
-        for (String line : lines) {
-            line = line.replaceAll("[^\\u0020-\\u007E]", "").trim();
-
-            if (line.startsWith("O|")) {
-                String[] parts = line.split("\\|");
-                if (parts.length >= 5) {
-                    sampleNo = parts[2];
-                    String[] testIdParts = parts[4].split("\\^");
-                    if (testIdParts.length >= 4) {
-                        analyteCode = testIdParts[3];
-                    }
-                }
-            } else if (line.startsWith("R|1|")) {
-                String[] parts = line.split("\\|");
-                if (parts.length >= 4) {
-                    resultValue = parts[3];
-                }
-            } else if (line.startsWith("R|2|")) {
-                String[] parts = line.split("\\|");
-                if (parts.length >= 4) {
-                    rateValue = parts[3];
+                switch (key) {
+                    case "SampleID=":
+                        sampleNo = value;
+                        logger.info("📌 Sample ID     : " + sampleNo);
+                        break;
+                    case "Analyte=":
+                        analyte = value.replaceAll("[^a-zA-Z0-9]", "");
+                        logger.info("🧪 Analyte Code  : " + analyte);
+                        break;
+                    case "Conc=":
+                        result = value;
+                        logger.info("📈 Result Value  : " + result);
+                        break;
+                    case "Rate=":
+                        rate = value;
+                        logger.info("⏱️  Rate Value    : " + rate);
+                        break;
+                    case "Unit=":
+                        unit = value;
+                        logger.info("📏 Unit          : " + unit);
+                        break;
+                    case "Flag=":
+                        flag = value;
+                        logger.info("🚩 Flag          : " + flag);
+                        break;
+                    case "Date=":
+                        date = value;
+                        logger.info("🗓️  Timestamp     : " + date);
+                        break;
                 }
             }
-        }
 
-        if (sampleNo != null && analyteCode != null && resultValue != null) {
-            sendSingleResult(null, sampleNo, analyteCode, resultValue, null, null);
-            if (rateValue != null) {
-                sendSingleResult(null, sampleNo, analyteCode + "_RATE", rateValue, null, null);
+            if (sampleNo == null || analyte == null || result == null) {
+                logger.warn("❌ Required fields missing: SampleID=" + sampleNo + ", Analyte=" + analyte + ", Result=" + result);
+                return;
             }
-        } else {
-            logger.warn("Incomplete message block: Sample=" + sampleNo + ", Analyte=" + analyteCode);
+
+            sendSingleResult(null, sampleNo, analyte, result, null, null);
+            if (rate != null) {
+                sendSingleResult(null, sampleNo, analyte , rate, null, null);
+            }
+
+            logger.info("✅ Result(s) sent to LIMS for Sample=" + sampleNo);
+        } catch (Exception e) {
+            logger.error("❌ Error processing formatted result", e);
         }
     }
 
     private static void sendSingleResult(String patientId, String sampleNo, String testCode, String resultValue, Double minValue, Double maxValue) {
         try {
+            if (minValue == null) {
+                minValue = 0.0;
+            }
+            if (maxValue == null) {
+                maxValue = 9999.0;
+            }
+
             DataBundle dataBundle = new DataBundle();
             dataBundle.setMiddlewareSettings(middlewareSettings);
 
-            PatientRecord patientRecord = new PatientRecord(0, patientId, null, "Unknown", null, null, null, null, null, null, null);
+            PatientRecord patientRecord = new PatientRecord(
+                    0, patientId, null, "Unknown", null, null, null, null, null, null, null
+            );
             dataBundle.setPatientRecord(patientRecord);
 
-            ResultsRecord resultsRecord = new ResultsRecord(0, testCode, resultValue, minValue, maxValue, "", "Serum", "", null, null, patientId);
+            ResultsRecord resultsRecord = new ResultsRecord(
+                    0, testCode, resultValue, minValue, maxValue, "",
+                    "Serum", "", null, null, patientId
+            );
             dataBundle.addResultsRecord(resultsRecord);
 
             limsUtils.pushResults(dataBundle);
-            logger.info("Result pushed: " + testCode + " for sample: " + sampleNo);
+            logger.info("📤 Result pushed to LIMS: " + testCode + " = " + resultValue);
         } catch (Exception e) {
-            logger.error("Error sending result for: " + testCode, e);
+            logger.error("❌ Error sending result for test: " + testCode, e);
         }
     }
+
 }
