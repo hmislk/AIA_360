@@ -157,14 +157,14 @@ public class AIA_360 {
                 return;
             }
             
-            String extracBarcode = sampleNo.split(" ")[0];
+            String sampleBarcode = sampleNo.split(" ")[0];
 
-            sendSingleResult(null, extracBarcode, analyte, result, null, null);
+            sendSingleResult(null, sampleBarcode, analyte, result, null, null);
             if (rate != null) {
-                sendSingleResult(null, extracBarcode, analyte + "_RATE", rate, null, null);
+                sendSingleResult(null, sampleBarcode, analyte + "_RATE", rate, null, null);
             }
 
-            logger.info("✅ Result(s) sent to LIMS for Sample=" + extracBarcode);
+            logger.info("✅ Result(s) sent to LIMS for Sample=" + sampleBarcode);
         } catch (Exception e) {
             logger.error("❌ Error processing formatted result", e);
         }
