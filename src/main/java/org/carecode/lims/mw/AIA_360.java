@@ -156,13 +156,15 @@ public class AIA_360 {
                 logger.warn("❌ Required fields missing: SampleID=" + sampleNo + ", Analyte=" + analyte + ", Result=" + result);
                 return;
             }
+            
+            String extracBarcode = sampleNo.split(" ")[0];
 
-            sendSingleResult(null, sampleNo, analyte, result, null, null);
+            sendSingleResult(null, extracBarcode, analyte, result, null, null);
             if (rate != null) {
-                sendSingleResult(null, sampleNo, analyte + "_RATE", rate, null, null);
+                sendSingleResult(null, extracBarcode, analyte + "_RATE", rate, null, null);
             }
 
-            logger.info("✅ Result(s) sent to LIMS for Sample=" + sampleNo);
+            logger.info("✅ Result(s) sent to LIMS for Sample=" + extracBarcode);
         } catch (Exception e) {
             logger.error("❌ Error processing formatted result", e);
         }
